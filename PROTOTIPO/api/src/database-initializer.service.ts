@@ -154,17 +154,17 @@ export class DatabaseInitializerService implements OnApplicationBootstrap {
 
     // 7. Productos de Demostración con imágenes y precios
     await this.dataSource.query(`
-      INSERT INTO productos (id_producto, codigo, nombre, descripcion, id_categoria, precio_base, estado, fecha_creacion) VALUES
-        (1, 'POL-001', 'Polera Premium Algodón Pima', 'Polera suave de alta durabilidad, corte regular fit.', 1, 120.00, 'Activo', NOW()),
-        (2, 'CAM-002', 'Camisa Oxford Slim Fit Celeste', 'Camisa clásica para oficina o eventos casuales.', 2, 210.00, 'Activo', NOW()),
-        (3, 'JEA-003', 'Jeans Denim Clásico Azul', 'Jeans resistente de mezclilla premium con elasticidad.', 3, 280.00, 'Activo', NOW()),
-        (4, 'CHA-004', 'Chamarra Bomber Negra', 'Chamarra impermeable con forro térmico y cierres metálicos.', 4, 450.00, 'Activo', NOW()),
-        (5, 'VES-005', 'Vestido Floral de Verano', 'Vestido fresco con estampado floral y ajuste a la cintura.', 5, 290.00, 'Activo', NOW()),
-        (6, 'DEP-006', 'Conjunto Deportivo Tech Fleece', 'Buzo y polerón térmico transpirable para entrenamiento.', 6, 350.00, 'Activo', NOW())
+      INSERT INTO productos (id_producto, codigo, nombre, descripcion, id_categoria, precio_base, estado, fecha_registro) VALUES
+        (1, 'POL-001', 'Polera Premium Algodón Pima', 'Polera suave de alta durabilidad, corte regular fit.', 1, 120.00, 'Disponible', NOW()),
+        (2, 'CAM-002', 'Camisa Oxford Slim Fit Celeste', 'Camisa clásica para oficina o eventos casuales.', 2, 210.00, 'Disponible', NOW()),
+        (3, 'JEA-003', 'Jeans Denim Clásico Azul', 'Jeans resistente de mezclilla premium con elasticidad.', 3, 280.00, 'Disponible', NOW()),
+        (4, 'CHA-004', 'Chamarra Bomber Negra', 'Chamarra impermeable con forro térmico y cierres metálicos.', 4, 450.00, 'Disponible', NOW()),
+        (5, 'VES-005', 'Vestido Floral de Verano', 'Vestido fresco con estampado floral y ajuste a la cintura.', 5, 290.00, 'Disponible', NOW()),
+        (6, 'DEP-006', 'Conjunto Deportivo Tech Fleece', 'Buzo y polerón térmico transpirable para entrenamiento.', 6, 350.00, 'Disponible', NOW())
       ON CONFLICT (id_producto) DO NOTHING;
 
       -- Imágenes
-      INSERT INTO producto_imagenes (id_producto, url_imagen, orden, es_principal) VALUES
+      INSERT INTO producto_imagenes (id_producto, url, orden, es_principal) VALUES
         (1, 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&auto=format&fit=crop&q=80', 1, true),
         (2, 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=800&auto=format&fit=crop&q=80', 1, true),
         (3, 'https://images.unsplash.com/photo-1542272604-780c96856592?w=800&auto=format&fit=crop&q=80', 1, true),
