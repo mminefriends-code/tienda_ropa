@@ -20,6 +20,8 @@ import { ReportesVozModule } from './modulos/reportes-voz/ReportesVozModule.js';
 import { DashboardModule } from './modulos/dashboard/DashboardModule.js';
 import { AlertasCriticasModule } from './modulos/alertas/AlertasCriticasModule.js';
 
+import { DatabaseInitializerService } from './database-initializer.service.js';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -51,9 +53,10 @@ import { AlertasCriticasModule } from './modulos/alertas/AlertasCriticasModule.j
     ComprobantesModule,
     RecomendacionesModule,
     ReportesVozModule,
-      DashboardModule,
-      AlertasCriticasModule,
+    DashboardModule,
+    AlertasCriticasModule,
   ],
   controllers: [HealthController],
+  providers: [DatabaseInitializerService],
 })
 export class AppModule {}
