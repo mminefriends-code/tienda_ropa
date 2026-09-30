@@ -32,7 +32,7 @@ import { AlertasCriticasModule } from './modulos/alertas/AlertasCriticasModule.j
         type: 'postgres',
         url: config.get<string>('DATABASE_URL'),
         autoLoadEntities: true,
-        synchronize: false,
+        synchronize: config.get<string>('DATABASE_SYNCHRONIZE') === 'true' || config.get<string>('NODE_ENV') !== 'production',
         ssl: config.get<string>('DATABASE_SSL') === 'true' ? { rejectUnauthorized: false } : false,
       }),
     }),
