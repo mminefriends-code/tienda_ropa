@@ -30,8 +30,6 @@ services:
     name: tiendas-montano-web
     runtime: static
     rootDir: PROTOTIPO/web
-    plan: free
-    region: oregon
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     routes:
