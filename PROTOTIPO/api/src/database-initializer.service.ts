@@ -12,6 +12,7 @@ export class DatabaseInitializerService implements OnApplicationBootstrap {
     try {
       this.logger.log('Iniciando verificación y creación completa de tablas PostgreSQL...');
       await this.createAllTables();
+      await this.runMigrations();
       await this.seedAllData();
       this.logger.log('🎉 Base de datos 100% sincronizada, poblada y operativa.');
     } catch (error) {
@@ -195,7 +196,8 @@ export class DatabaseInitializerService implements OnApplicationBootstrap {
         nombre VARCHAR(100) UNIQUE NOT NULL,
         descripcion TEXT,
         id_temporada INTEGER REFERENCES temporadas(id_temporada),
-        estado VARCHAR(20) DEFAULT 'Activa'
+        estado VARCHAR(20) DEFAULT 'Activa',
+        fecha_creacion TIMESTAMP DEFAULT NOW()
       )`,
 
       `CREATE TABLE IF NOT EXISTS proveedores (
@@ -253,7 +255,7 @@ export class DatabaseInitializerService implements OnApplicationBootstrap {
         PRIMARY KEY (id_coleccion, id_producto)
       )`,
 
-      // 3. Inventario y Stock
+      // 3. Inventario, Compras y Stock
       `CREATE TABLE IF NOT EXISTS inventario_stock (
         id_stock SERIAL PRIMARY KEY,
         id_ptc INTEGER REFERENCES producto_talla_color(id_ptc),
@@ -263,6 +265,28 @@ export class DatabaseInitializerService implements OnApplicationBootstrap {
         cantidad_vendida INTEGER DEFAULT 0,
         stock_minimo_alert INTEGER DEFAULT 0,
         UNIQUE (id_ptc, id_sucursal)
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS ordenes_compra (
+        id_orden_compra SERIAL PRIMARY KEY,
+        id_proveedor INTEGER REFERENCES proveedores(id_proveedor),
+        id_sucursal INTEGER REFERENCES sucursales(id_sucursal),
+        numero VARCHAR(20),
+        fecha_orden TIMESTAMP DEFAULT NOW(),
+        fecha_estimada_entrega DATE,
+        fecha_recepcion TIMESTAMP,
+        estado VARCHAR(20) DEFAULT 'Pendiente',
+        total DECIMAL(12,2),
+        observaciones TEXT
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS orden_compra_items (
+        id_orden_item SERIAL PRIMARY KEY,
+        id_orden_compra INTEGER REFERENCES ordenes_compra(id_orden_compra) ON DELETE CASCADE,
+        id_ptc INTEGER REFERENCES producto_talla_color(id_ptc),
+        cantidad INTEGER NOT NULL DEFAULT 1,
+        precio_unitario DECIMAL(10,2),
+        subtotal DECIMAL(12,2)
       )`,
 
       `CREATE TABLE IF NOT EXISTS alertas_stock_config (
@@ -414,6 +438,29 @@ export class DatabaseInitializerService implements OnApplicationBootstrap {
     }
   }
 
+  private async runMigrations() {
+    const migrationQueries = [
+      `ALTER TABLE colecciones ADD COLUMN IF NOT EXISTS fecha_creacion TIMESTAMP DEFAULT NOW()`,
+      `ALTER TABLE colecciones ADD COLUMN IF NOT EXISTS estado VARCHAR(20) DEFAULT 'Activa'`,
+      `ALTER TABLE temporadas ADD COLUMN IF NOT EXISTS fecha_inicio DATE`,
+      `ALTER TABLE temporadas ADD COLUMN IF NOT EXISTS fecha_fin DATE`,
+      `ALTER TABLE temporadas ADD COLUMN IF NOT EXISTS estado VARCHAR(20) DEFAULT 'Activa'`,
+      `ALTER TABLE productos ADD COLUMN IF NOT EXISTS descuento DECIMAL(5,2) DEFAULT 0`,
+      `ALTER TABLE productos ADD COLUMN IF NOT EXISTS porcentaje_iva DECIMAL(5,2) DEFAULT 0`,
+      `ALTER TABLE productos ADD COLUMN IF NOT EXISTS destacado BOOLEAN DEFAULT true`,
+      `ALTER TABLE ventas ADD COLUMN IF NOT EXISTS total DECIMAL(10,2) DEFAULT 0`,
+      `ALTER TABLE ventas ADD COLUMN IF NOT EXISTS estado VARCHAR(20) DEFAULT 'Completada'`,
+    ];
+
+    for (const mq of migrationQueries) {
+      try {
+        await this.dataSource.query(mq);
+      } catch (err) {
+        this.logger.warn(`Aviso migración: ${(err as Error)?.message}`);
+      }
+    }
+  }
+
   private async seedAllData() {
     const hash = await bcrypt.hash('admin123', 10);
 
@@ -421,7 +468,7 @@ export class DatabaseInitializerService implements OnApplicationBootstrap {
     await this.dataSource.query(`
       INSERT INTO roles (id_rol, nombre_rol, descripcion, permisos_json, estado) VALUES
         (1, 'Administrador', 'Acceso total del sistema', '["*"]'::jsonb, 'Activo'),
-        (2, 'Gerente', 'Administra ciudades, sucursales y catalogo', '["gestionar_usuarios","gestionar_reservas","gestionar_ciudades","gestionar_catalogo","gestionar_compras","ver_reportes"]'::jsonb, 'Activo'),
+        (2, 'Gerente', 'Administra ciudades, sucursales y catalogo', '["gestionar_usuarios","gestionar_reservas","gestionar_ciudades","gestionar_catalogo","gestionar_compras","ver_reportes","gestionar_temporadas"]'::jsonb, 'Activo'),
         (3, 'Vendedor', 'Atiende en mostrador y procesa ventas', '["ver_catalogo","registrar_venta","procesar_pago","gestionar_reservas","gestionar_devoluciones"]'::jsonb, 'Activo'),
         (4, 'Cliente', 'Compra por la web y app movil', '["ver_catalogo","gestionar_carrito","realizar_compra","gestionar_reservas","usar_vestidor_ra"]'::jsonb, 'Activo')
       ON CONFLICT (id_rol) DO UPDATE SET permisos_json = EXCLUDED.permisos_json;
@@ -497,7 +544,7 @@ export class DatabaseInitializerService implements OnApplicationBootstrap {
       ON CONFLICT (id_color) DO NOTHING;
     `);
 
-    // 6. Categorías y Temporadas
+    // 6. Categorías, Temporadas y Colecciones
     await this.dataSource.query(`
       INSERT INTO categorias (id_categoria, nombre, descripcion) VALUES
         (1, 'Poleras y Camisetas', 'Poleras de algodón pima, básicas y estampadas'),
@@ -512,17 +559,23 @@ export class DatabaseInitializerService implements OnApplicationBootstrap {
         (1, 'Colección Primavera - Verano 2026', '2026-09-01', '2027-02-28', 'Activa'),
         (2, 'Colección Permanente', NULL, NULL, 'Activa')
       ON CONFLICT (id_temporada) DO NOTHING;
+
+      INSERT INTO colecciones (id_coleccion, nombre, descripcion, id_temporada, estado, fecha_creacion) VALUES
+        (1, 'Esenciales Urbanos', 'Prendas básicas y versátiles para el día a día', 1, 'Activa', NOW()),
+        (2, 'Elegancia Contemporánea', 'Moda premium de oficina y ocasiones especiales', 1, 'Activa', NOW())
+      ON CONFLICT (id_coleccion) DO NOTHING;
     `);
 
-    // 7. Productos con precios, fotos y stock
+    // 7. Productos con precios, fotos de prendas aisladas y stock
     await this.dataSource.query(`
-      INSERT INTO productos (id_producto, codigo, nombre, descripcion, id_categoria, precio_base, porcentaje_iva, destacado, descuento, estado, fecha_registro) VALUES
-        (1, 'POL-001', 'Polera Premium Algodón Pima', 'Polera suave de alta durabilidad, corte regular fit.', 1, 120.00, 0, true, 0, 'Disponible', NOW()),
-        (2, 'CAM-002', 'Camisa Oxford Slim Fit Celeste', 'Camisa clásica para oficina o eventos casuales.', 2, 210.00, 0, true, 0, 'Disponible', NOW()),
-        (3, 'JEA-003', 'Jeans Denim Clásico Azul', 'Jeans resistente de mezclilla premium con elasticidad.', 3, 280.00, 0, true, 10, 'Disponible', NOW()),
-        (4, 'CHA-004', 'Chamarra Bomber Negra', 'Chamarra impermeable con forro térmico y cierres metálicos.', 4, 450.00, 0, true, 0, 'Disponible', NOW()),
-        (5, 'VES-005', 'Vestido Floral de Verano', 'Vestido fresco con estampado floral y ajuste a la cintura.', 5, 290.00, 0, true, 15, 'Disponible', NOW()),
-        (6, 'DEP-006', 'Conjunto Deportivo Tech Fleece', 'Buzo y polerón térmico transpirable para entrenamiento.', 6, 350.00, 0, true, 0, 'Disponible', NOW())
+      INSERT INTO productos (id_producto, codigo, nombre, descripcion, id_categoria, id_temporada, precio_base, porcentaje_iva, destacado, descuento, estado, fecha_registro) VALUES
+        (1, 'POL-001', 'Polera Premium Algodón Pima', 'Polera suave de alta durabilidad, corte regular fit.', 1, 1, 120.00, 0, true, 0, 'Disponible', NOW()),
+        (2, 'CAM-002', 'Camisa Oxford Slim Fit Celeste', 'Camisa clásica para oficina o eventos casuales.', 2, 1, 210.00, 0, true, 0, 'Disponible', NOW()),
+        (3, 'JEA-003', 'Jeans Denim Clásico Azul', 'Jeans resistente de mezclilla premium con elasticidad.', 3, 2, 280.00, 0, true, 10, 'Disponible', NOW()),
+        (4, 'CHA-004', 'Chamarra Bomber Negra', 'Chamarra impermeable con forro térmico y cierres metálicos.', 4, 1, 450.00, 0, true, 0, 'Disponible', NOW()),
+        (5, 'VES-005', 'Vestido Floral de Verano', 'Vestido fresco con estampado floral y ajuste a la cintura.', 5, 1, 290.00, 0, true, 15, 'Disponible', NOW()),
+        (6, 'DEP-006', 'Conjunto Deportivo Tech Fleece', 'Buzo y polerón térmico transpirable para entrenamiento.', 6, 2, 350.00, 0, true, 0, 'Disponible', NOW()),
+        (7, 'TMU-REM-001', 'Remera Básica Algodón Montaño', 'Remera clásica de algodón peinado 100% boliviano.', 1, 1, 95.00, 0, true, 0, 'Disponible', NOW())
       ON CONFLICT (id_producto) DO UPDATE SET 
         nombre = EXCLUDED.nombre,
         precio_base = EXCLUDED.precio_base,
@@ -535,7 +588,8 @@ export class DatabaseInitializerService implements OnApplicationBootstrap {
         (3, 'https://images.unsplash.com/photo-1542272604-780c96856592?w=800&auto=format&fit=crop&q=80', 1, true),
         (4, 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=800&auto=format&fit=crop&q=80', 1, true),
         (5, 'https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?w=800&auto=format&fit=crop&q=80', 1, true),
-        (6, 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&auto=format&fit=crop&q=80', 1, true)
+        (6, 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&auto=format&fit=crop&q=80', 1, true),
+        (7, 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&auto=format&fit=crop&q=80', 1, true)
       ON CONFLICT DO NOTHING;
 
       INSERT INTO producto_talla_color (id_ptc, id_producto, id_talla, id_color, estado_stock) VALUES
@@ -552,7 +606,9 @@ export class DatabaseInitializerService implements OnApplicationBootstrap {
         (11, 5, 2, 4, 'Disponible'),
         (12, 5, 3, 4, 'Disponible'),
         (13, 6, 3, 1, 'Disponible'),
-        (14, 6, 4, 1, 'Disponible')
+        (14, 6, 4, 1, 'Disponible'),
+        (15, 7, 3, 1, 'Disponible'),
+        (16, 7, 4, 1, 'Disponible')
       ON CONFLICT (id_ptc) DO NOTHING;
 
       INSERT INTO inventario_stock (id_ptc, id_sucursal, cantidad_disponible, cantidad_reservada, cantidad_vendida, stock_minimo_alert) VALUES
@@ -569,8 +625,26 @@ export class DatabaseInitializerService implements OnApplicationBootstrap {
         (11, 1, 14, 1, 3, 4),
         (12, 1, 19, 0, 5, 5),
         (13, 1, 20, 0, 8, 5),
-        (14, 1, 25, 0, 10, 6)
+        (14, 1, 25, 0, 10, 6),
+        (15, 1, 35, 0, 12, 5),
+        (16, 1, 28, 0, 8, 5)
       ON CONFLICT (id_ptc, id_sucursal) DO UPDATE SET cantidad_disponible = EXCLUDED.cantidad_disponible;
+
+      -- Ventas para alimentar Dashboard
+      INSERT INTO ventas (id_venta, numero_factura, id_cliente, id_usuario, id_sucursal, tipo_venta, subtotal, descuento, impuesto, total, metodo_pago, estado, fecha_venta)
+      VALUES
+        (1, 'FAC-2026-0001', 1, 1, 1, 'Presencial', 330.00, 0, 0, 330.00, 'Efectivo', 'Completada', NOW() - INTERVAL '3 days'),
+        (2, 'FAC-2026-0002', 1, 1, 1, 'Presencial', 450.00, 0, 0, 450.00, 'Tarjeta', 'Completada', NOW() - INTERVAL '1 day'),
+        (3, 'FAC-2026-0003', 1, 1, 1, 'Online', 280.00, 0, 0, 280.00, 'QR', 'Completada', NOW())
+      ON CONFLICT (id_venta) DO NOTHING;
+
+      INSERT INTO venta_items (id_venta_item, id_venta, id_ptc, cantidad, precio_unitario, subtotal)
+      VALUES
+        (1, 1, 1, 1, 120.00, 120.00),
+        (2, 1, 5, 1, 210.00, 210.00),
+        (3, 2, 9, 1, 450.00, 450.00),
+        (4, 3, 7, 1, 280.00, 280.00)
+      ON CONFLICT (id_venta_item) DO NOTHING;
 
       INSERT INTO respaldo_programacion (id_programacion, tipo_frecuencia, hora_ejecucion, activo, retencion_dias)
       VALUES (1, 'Diario', '02:00:00', true, 30)
@@ -583,15 +657,14 @@ export class DatabaseInitializerService implements OnApplicationBootstrap {
       SELECT setval('usuarios_id_usuario_seq', (SELECT COALESCE(MAX(id_usuario), 1) FROM usuarios));
       SELECT setval('ciudades_id_ciudad_seq', (SELECT COALESCE(MAX(id_ciudad), 1) FROM ciudades));
       SELECT setval('sucursales_id_sucursal_seq', (SELECT COALESCE(MAX(id_sucursal), 1) FROM sucursales));
-      SELECT setval('usuarios_empleados_id_empleado_seq', (SELECT COALESCE(MAX(id_empleado), 1) FROM usuarios_empleados));
-      SELECT setval('clientes_id_cliente_seq', (SELECT COALESCE(MAX(id_cliente), 1) FROM clientes));
-      SELECT setval('tallas_id_talla_seq', (SELECT COALESCE(MAX(id_talla), 1) FROM tallas));
-      SELECT setval('colores_id_color_seq', (SELECT COALESCE(MAX(id_color), 1) FROM colores));
       SELECT setval('categorias_id_categoria_seq', (SELECT COALESCE(MAX(id_categoria), 1) FROM categorias));
       SELECT setval('temporadas_id_temporada_seq', (SELECT COALESCE(MAX(id_temporada), 1) FROM temporadas));
+      SELECT setval('colecciones_id_coleccion_seq', (SELECT COALESCE(MAX(id_coleccion), 1) FROM colecciones));
       SELECT setval('productos_id_producto_seq', (SELECT COALESCE(MAX(id_producto), 1) FROM productos));
       SELECT setval('producto_talla_color_id_ptc_seq', (SELECT COALESCE(MAX(id_ptc), 1) FROM producto_talla_color));
       SELECT setval('inventario_stock_id_stock_seq', (SELECT COALESCE(MAX(id_stock), 1) FROM inventario_stock));
+      SELECT setval('ventas_id_venta_seq', (SELECT COALESCE(MAX(id_venta), 1) FROM ventas));
+      SELECT setval('venta_items_id_venta_item_seq', (SELECT COALESCE(MAX(id_venta_item), 1) FROM venta_items));
     `);
   }
 }

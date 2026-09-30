@@ -89,7 +89,7 @@ export const PAQUETES_ADMIN: PaqueteMenu[] = [
         implementado: true,
       },
       {
-        ruta: '/productos/tmu-rem-001',
+        ruta: '/productos/POL-001',
         etiqueta: 'Disponibilidad por Sucursal',
         cu: 'CU17',
         permiso: 'consultar_kardex',

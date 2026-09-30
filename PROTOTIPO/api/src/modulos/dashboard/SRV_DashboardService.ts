@@ -182,7 +182,7 @@ export class DashboardService {
          FROM venta_items vi
          JOIN ventas v            ON v.id_venta = vi.id_venta
          JOIN producto_talla_color ptc ON ptc.id_ptc = vi.id_ptc
-         JOIN productos p         ON p.id_producto = p.id_producto
+         JOIN productos p         ON p.id_producto = ptc.id_producto
          LEFT JOIN categorias c   ON c.id_categoria = p.id_categoria
         WHERE v.estado = 'Completada'
           AND v.fecha_venta >= $1
@@ -216,7 +216,7 @@ export class DashboardService {
       `SELECT COALESCE(SUM(oi.cantidad), 0) AS proximas
          FROM ordenes_compra oc
          JOIN orden_compra_items oi ON oi.id_orden_compra = oc.id_orden_compra
-        WHERE oc.estado = 'Pendiente' AND oc.fecha_recepcion IS NULL${pInv}`,
+        WHERE oc.estado = 'Pendiente' AND oc.fecha_recepcion IS NULL${conSucursal ? ' AND oc.id_sucursal = $1' : ''}`,
       conSucursal ? [idSucursal] : [],
     );
 
@@ -225,7 +225,7 @@ export class DashboardService {
       `SELECT r.estado AS etiqueta, COUNT(*) AS valor
          FROM reservas r
         WHERE r.fecha_reserva >= $1
-          AND r.fecha_reserva <= $2${pSucursal}
+          AND r.fecha_reserva <= $2${conSucursal ? ' AND r.id_sucursal = $3' : ''}
         GROUP BY r.estado
         ORDER BY valor DESC`,
       conSucursal ? [desde, hasta, idSucursal] : [desde, hasta],
