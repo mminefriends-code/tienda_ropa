@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'access_token';
+const REFRESH_KEY = 'refresh_token';
 let promesaRefresh: Promise<string | null> | null = null;
 
 function renovarToken(): Promise<string | null> {
@@ -6,20 +7,31 @@ function renovarToken(): Promise<string | null> {
 
   promesaRefresh = (async () => {
     try {
+      const refreshToken = localStorage.getItem(REFRESH_KEY);
       const res = await fetch(`${api.baseUrl}/auth/refresh`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(refreshToken ? { Authorization: `Bearer ${refreshToken}` } : {}),
+        },
+        body: JSON.stringify({ refresh_token: refreshToken }),
         credentials: 'include',
       });
       if (!res.ok) return null;
       const body = (await res.json()) as LoginResponse;
-      localStorage.setItem(TOKEN_KEY, body.access_token);
-      window.dispatchEvent(
-        new CustomEvent('tm:sesion', {
-          detail: { token: body.access_token, usuario: body.usuario, tipo: 'renovada' },
-        }),
-      );
-      return body.access_token;
+      if (body.access_token) {
+        localStorage.setItem(TOKEN_KEY, body.access_token);
+        if (body.refresh_token) {
+          localStorage.setItem(REFRESH_KEY, body.refresh_token);
+        }
+        window.dispatchEvent(
+          new CustomEvent('tm:sesion', {
+            detail: { token: body.access_token, usuario: body.usuario, tipo: 'renovada' },
+          }),
+        );
+        return body.access_token;
+      }
+      return null;
     } catch {
       return null;
     } finally {
@@ -32,6 +44,7 @@ function renovarToken(): Promise<string | null> {
 
 function expulsarSesion(): void {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem('usuario');
   window.dispatchEvent(new CustomEvent('tm:sesion', { detail: { token: null, tipo: 'expirada' } }));
 }
@@ -1032,7 +1045,14 @@ export const api = {
       },
       { renovar: false },
     );
-    return handleResponse<LoginResponse>(res);
+    const data = await handleResponse<LoginResponse>(res);
+    if (data.access_token) {
+      localStorage.setItem(TOKEN_KEY, data.access_token);
+    }
+    if (data.refresh_token) {
+      localStorage.setItem(REFRESH_KEY, data.refresh_token);
+    }
+    return data;
   },
 
   async refresh(): Promise<LoginResponse | null> {
