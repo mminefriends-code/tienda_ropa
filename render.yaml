@@ -6,8 +6,8 @@ services:
     rootDir: PROTOTIPO/api
     plan: free
     region: oregon
-    buildCommand: npm install && npm run build
-    startCommand: npm run start:prod
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: node dist/main.js
     healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_ENV
