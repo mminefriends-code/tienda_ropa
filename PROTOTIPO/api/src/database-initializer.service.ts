@@ -192,7 +192,7 @@ export class DatabaseInitializerService implements OnApplicationBootstrap {
       ON CONFLICT (id_ptc) DO NOTHING;
 
       -- Stock en Sucursales
-      INSERT INTO inventario_stock (id_ptc, id_sucursal, stock_actual, stock_minimo) VALUES
+      INSERT INTO inventario_stock (id_ptc, id_sucursal, cantidad_disponible, stock_minimo_alert) VALUES
         (1, 1, 25, 5),
         (2, 1, 40, 10),
         (3, 1, 30, 8),
@@ -207,7 +207,7 @@ export class DatabaseInitializerService implements OnApplicationBootstrap {
         (12, 1, 19, 5),
         (13, 1, 20, 5),
         (14, 1, 25, 6)
-      ON CONFLICT (id_ptc, id_sucursal) DO UPDATE SET stock_actual = EXCLUDED.stock_actual;
+      ON CONFLICT (id_ptc, id_sucursal) DO UPDATE SET cantidad_disponible = EXCLUDED.cantidad_disponible;
     `);
 
     // Ajustar secuencias seriales
