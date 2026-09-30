@@ -1,0 +1,69 @@
+# Dependencias
+node_modules/
+
+# Entorno / secretos (nunca subir credenciales)
+# .env.example SI se sube a proposito: documenta que variables hacen falta
+# sin contener ningun valor. Por eso la excepcion de abajo.
+**/.env
+**/.env.*
+**/*.bak
+!**/.env.example
+
+# Pruebas de extremo a extremo: llevan la cadena de conexion de la base
+# de datos de PRODUCCION escrita dentro. Deben leerla de process.env.
+PROTOTIPO/e2e_cu*.js
+PROTOTIPO/e2e_*.js
+
+# Scripts de mantenimiento que conectan con la nube
+PROTOTIPO/api/src/modulos/*/agregar-permiso*.js
+PROTOTIPO/api/src/modulos/*/quitar-permiso*.js
+PROTOTIPO/api/src/modulos/*/check-roles.js
+
+# Comprobantes emitidos, respaldos y ficheros generados en runtime.
+# Contienen datos de clientes y de ventas.
+PROTOTIPO/api/comprobantes/
+PROTOTIPO/api/respaldos/
+PROTOTIPO/api/storage/
+PROTOTIPO/test-results/
+
+# Builds y temporales
+dist/
+build/
+**/build/
+**/.dart_tool/
+**/.gradle/
+*.tsbuildinfo
+
+# Flutter y Móvil
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+*.apk
+*.aab
+*.rar
+*.zip
+*.7z
+*.tar
+*.gz
+*.iso
+PROTOTIPOAPP/build/
+PROTOTIPOAPP/.dart_tool/
+PROTOTIPOAPP/android/.gradle/
+PROTOTIPOAPP/android/app/build/
+
+# Logs y multimedia pesada
+*.log
+npm-debug.log*
+*.mp4
+*.mkv
+*.mov
+
+# Temporales de Office / Access / sistemas
+~$*
+*.ldb
+*.laccdb
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
