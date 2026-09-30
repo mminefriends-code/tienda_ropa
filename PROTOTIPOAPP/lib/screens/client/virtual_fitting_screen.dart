@@ -68,7 +68,7 @@ class _VirtualFittingScreenState extends State<VirtualFittingScreen>
 
   // Datos biométricos calculados (calibrados con la web)
   int _hombrosCm = 42;
-  final int _torsoCm = 76;
+  int _torsoCm = 76;
 
   bool _isProcessing = false;
 
@@ -261,6 +261,20 @@ class _VirtualFittingScreenState extends State<VirtualFittingScreen>
           final shoulderPxOnScreen = (distPx / imgW) * screenSize.width;
 
           final hombrosCm = ((distPx / imgW) * 92.0).clamp(34.0, 56.0).round();
+          final torsoCm = (hombrosCm * 1.88).round();
+
+          String recommended = 'L';
+          if (hombrosCm < 39) {
+            recommended = 'S';
+          } else if (hombrosCm < 43) {
+            recommended = 'M';
+          } else if (hombrosCm < 48) {
+            recommended = 'L';
+          } else if (hombrosCm < 53) {
+            recommended = 'XL';
+          } else {
+            recommended = 'XXL';
+          }
 
           if (mounted) {
             setState(() {
@@ -270,6 +284,8 @@ class _VirtualFittingScreenState extends State<VirtualFittingScreen>
               _targetPoseAngle = angle;
               _targetPoseShoulderWidthPx = shoulderPxOnScreen;
               _hombrosCm = hombrosCm;
+              _torsoCm = torsoCm;
+              _recommendedSize = recommended;
             });
           }
         }
@@ -279,6 +295,9 @@ class _VirtualFittingScreenState extends State<VirtualFittingScreen>
       _isDetecting = false;
     }
   }
+
+  String _recommendedSize = 'L';
+  String get recommendedSize => _recommendedSize;
 
   InputImage? _inputImageFromCameraImage(CameraImage image) {
     final camera = _cameras[_selectedCameraIndex];
@@ -336,17 +355,17 @@ class _VirtualFittingScreenState extends State<VirtualFittingScreen>
     await _startCameraController(_cameras[_selectedCameraIndex]);
   }
 
-  // Factor de escala según estilo de calce (calibrado con la web)
+  // Factor de escala según estilo de calce (calibrado con la anatomía y hombros reales)
   double get _factorEstilo {
     switch (_estiloAjuste) {
       case EstiloAjusteRa.slim:
-        return 1.45;
+        return 1.15;
       case EstiloAjusteRa.regular:
-        return 1.68;
+        return 1.30;
       case EstiloAjusteRa.oversize:
-        return 1.95;
+        return 1.48;
       case EstiloAjusteRa.maxiBaggy:
-        return 2.25;
+        return 1.68;
     }
   }
 
@@ -362,10 +381,10 @@ class _VirtualFittingScreenState extends State<VirtualFittingScreen>
       case 'L':
         return 1.08;
       case 'XL':
-        return 1.16;
+        return 1.18;
       case 'XXL':
       case '2XL':
-        return 1.25;
+        return 1.28;
       default:
         return 1.00;
     }
@@ -612,7 +631,7 @@ class _VirtualFittingScreenState extends State<VirtualFittingScreen>
                           const Icon(Icons.auto_awesome, color: Color(0xFF10B981), size: 13),
                           const SizedBox(width: 5),
                           Text(
-                            'Talla Recomendada: $_currentSize (M - XL)',
+                            'Talla Recomendada: $_recommendedSize',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 11,
@@ -694,27 +713,14 @@ class _VirtualFittingScreenState extends State<VirtualFittingScreen>
       );
     }
 
-    if (_loadingGarment) {
-      return SizedBox(
-        width: width,
-        height: height,
-        child: const Center(
-          child: CircularProgressIndicator(
-            color: Color(0xFF10B981),
-            strokeWidth: 2,
-          ),
+    return SizedBox(
+      width: width,
+      height: height,
+      child: const Center(
+        child: CircularProgressIndicator(
+          color: Color(0xFF10B981),
+          strokeWidth: 2,
         ),
-      );
-    }
-
-    // Fallback con filtro de multiplicación
-    return ColorFiltered(
-      colorFilter: const ColorFilter.mode(Colors.transparent, BlendMode.multiply),
-      child: ProductMediaHelper.fromProduct(
-        widget.product,
-        width: width,
-        height: height,
-        fit: BoxFit.contain,
       ),
     );
   }

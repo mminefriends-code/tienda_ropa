@@ -15,14 +15,14 @@ class ProcessedGarment {
     required this.image,
     required this.width,
     required this.height,
-  }) : aspectRatio = (width > 0 && height > 0) ? (width / height) : 0.82;
+  }) : aspectRatio = (width > 0 && height > 0) ? (width / height) : 0.85;
 }
 
 class GarmentProcessor {
   static final Map<String, ProcessedGarment> _cache = {};
 
-  /// Carga y recorta inteligentemente el fondo de la prenda (fondo blanco/gris de estudio)
-  /// eliminando el 100% de la caja blanca y ajustando la silueta ceñida idéntico a la web (VestidorRa.tsx).
+  /// Carga y elimina el 100% del fondo blanco/gris de estudio de la prenda,
+  /// dejando únicamente la silueta de la ropa con transparencia perfecta.
   static Future<ProcessedGarment?> processGarment(String imagePathOrUrl) async {
     if (_cache.containsKey(imagePathOrUrl)) {
       return _cache[imagePathOrUrl];
@@ -31,11 +31,10 @@ class GarmentProcessor {
     try {
       Uint8List rawBytes;
       if (imagePathOrUrl.startsWith('http://') || imagePathOrUrl.startsWith('https://')) {
-        final res = await http.get(Uri.parse(imagePathOrUrl)).timeout(const Duration(seconds: 8));
+        final res = await http.get(Uri.parse(imagePathOrUrl)).timeout(const Duration(seconds: 10));
         if (res.statusCode != 200) return null;
         rawBytes = res.bodyBytes;
       } else {
-        // Asset local
         final data = await rootBundle.load(imagePathOrUrl);
         rawBytes = data.buffer.asUint8List();
       }
@@ -50,16 +49,15 @@ class GarmentProcessor {
       final byteData = await origImg.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (byteData == null) return null;
 
-      // Crear copia mutable en memoria para manipular canales RGBA
       final pixels = Uint8List.fromList(
         byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes),
       );
 
       int idx(int x, int y) => (y * w + x) * 4;
 
-      // 1. Muestrear los bordes exteriores para obtener color de fondo predominante
+      // 1. Muestreo de las 4 esquinas y bordes
       int rSum = 0, gSum = 0, bSum = 0, samples = 0;
-      for (int x = 0; x < w; x += 3) {
+      for (int x = 0; x < w; x += 4) {
         final iTop = idx(x, 0);
         final iBottom = idx(x, h - 1);
         rSum += pixels[iTop] + pixels[iBottom];
@@ -67,7 +65,7 @@ class GarmentProcessor {
         bSum += pixels[iTop + 2] + pixels[iBottom + 2];
         samples += 2;
       }
-      for (int y = 0; y < h; y += 3) {
+      for (int y = 0; y < h; y += 4) {
         final iLeft = idx(0, y);
         final iRight = idx(w - 1, y);
         rSum += pixels[iLeft] + pixels[iRight];
@@ -80,9 +78,6 @@ class GarmentProcessor {
       final bgG = samples > 0 ? (gSum / samples).round() : 255;
       final bgB = samples > 0 ? (bSum / samples).round() : 255;
 
-      const tol = 60;
-      const tolSq = tol * tol;
-
       final visited = Uint8List(w * h);
       final queue = <int>[];
 
@@ -94,7 +89,7 @@ class GarmentProcessor {
         queue.add(p);
       }
 
-      // Encolar los 4 bordes exteriores
+      // Encolar los 4 perímetros exteriores
       for (int x = 0; x < w; x++) {
         enqueue(x, 0);
         enqueue(x, h - 1);
@@ -104,7 +99,7 @@ class GarmentProcessor {
         enqueue(w - 1, y);
       }
 
-      // Flood-fill desde los bordes para eliminar fondo continuo de estudio
+      // 2. Flood Fill inteligente para vaciar el fondo continuo
       int head = 0;
       while (head < queue.length) {
         final p = queue[head++];
@@ -117,7 +112,7 @@ class GarmentProcessor {
         final b = pixels[pi + 2];
         final a = pixels[pi + 3];
 
-        if (a < 15) {
+        if (a < 10) {
           enqueue(x + 1, y);
           enqueue(x - 1, y);
           enqueue(x, y + 1);
@@ -130,12 +125,12 @@ class GarmentProcessor {
         final db = b - bgB;
         final distSq = dr * dr + dg * dg + db * db;
 
-        // Detección de fondo de estudio (blanco / gris claro / fuera de foco)
-        final isStudioWhite = r > 185 && g > 185 && b > 185 && (r - g).abs() < 30 && (r - b).abs() < 30;
-        final isBackground = distSq <= tolSq || isStudioWhite;
+        // Criterio de fondo: fondo blanco / neutro / estudio
+        final isWhiteOrGray = r > 165 && g > 165 && b > 165 && (r - g).abs() < 35 && (r - b).abs() < 35;
+        final isBgMatch = distSq < (75 * 75) || isWhiteOrGray;
 
-        if (isBackground) {
-          pixels[pi + 3] = 0; // Transparente 100%
+        if (isBgMatch) {
+          pixels[pi + 3] = 0; // Transparente
           enqueue(x + 1, y);
           enqueue(x - 1, y);
           enqueue(x, y + 1);
@@ -143,27 +138,28 @@ class GarmentProcessor {
         }
       }
 
-      // Barrido de seguridad general: cualquier píxel de fondo blanco exterior aislado se vuelve transparente
+      // 3. Barrido global de seguridad para eliminar cualquier resto de blanco exterior
       for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
           final pi = idx(x, y);
           final r = pixels[pi];
           final g = pixels[pi + 1];
           final b = pixels[pi + 2];
-          if (r > 215 && g > 215 && b > 215 && (r - g).abs() < 22 && (r - b).abs() < 22) {
+          // Si es blanco o gris muy claro de fondo aislado
+          if (r > 200 && g > 200 && b > 200 && (r - g).abs() < 25 && (r - b).abs() < 25) {
             pixels[pi + 3] = 0;
           }
         }
       }
 
-      // 2. Encontrar caja de recorte ceñida (Tight Bounding Box)
+      // 4. Bounding Box ajustada a la prenda
       int minX = w, minY = h, maxX = 0, maxY = 0;
       bool hasGarment = false;
 
       for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
           final a = pixels[idx(x, y) + 3];
-          if (a > 30) {
+          if (a > 25) {
             hasGarment = true;
             if (x < minX) minX = x;
             if (x > maxX) maxX = x;
@@ -179,7 +175,6 @@ class GarmentProcessor {
         maxX = w - 1;
         maxY = h - 1;
       } else {
-        // Añadir margen mínimo de 2px
         minX = (minX - 2).clamp(0, w - 1);
         minY = (minY - 2).clamp(0, h - 1);
         maxX = (maxX + 2).clamp(0, w - 1);
@@ -204,7 +199,6 @@ class GarmentProcessor {
         }
       }
 
-      // Reconstruir imagen ceñida recortada y transparente
       final completer = Completer<ui.Image>();
       ui.decodeImageFromPixels(
         cropPixels,
