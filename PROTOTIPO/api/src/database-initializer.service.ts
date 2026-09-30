@@ -53,6 +53,19 @@ export class DatabaseInitializerService implements OnApplicationBootstrap {
   }
 
   private async seedInitialData() {
+    // Asegurar columnas requeridas por el frontend y la API
+    await this.dataSource.query(`
+      ALTER TABLE productos ADD COLUMN IF NOT EXISTS porcentaje_iva DECIMAL(5,2) DEFAULT 0;
+      ALTER TABLE productos ADD COLUMN IF NOT EXISTS destacado BOOLEAN DEFAULT true;
+      ALTER TABLE productos ADD COLUMN IF NOT EXISTS descuento DECIMAL(5,2) DEFAULT 0;
+      ALTER TABLE tallas ADD COLUMN IF NOT EXISTS estado VARCHAR(20) DEFAULT 'Activo';
+      ALTER TABLE colores ADD COLUMN IF NOT EXISTS estado VARCHAR(20) DEFAULT 'Activo';
+      ALTER TABLE inventario_stock ADD COLUMN IF NOT EXISTS cantidad_disponible INTEGER DEFAULT 0;
+      ALTER TABLE inventario_stock ADD COLUMN IF NOT EXISTS cantidad_reservada INTEGER DEFAULT 0;
+      ALTER TABLE inventario_stock ADD COLUMN IF NOT EXISTS cantidad_vendida INTEGER DEFAULT 0;
+      ALTER TABLE inventario_stock ADD COLUMN IF NOT EXISTS stock_minimo_alert INTEGER DEFAULT 0;
+    `);
+
     const hash = await bcrypt.hash('admin123', 10);
 
     // 1. Roles

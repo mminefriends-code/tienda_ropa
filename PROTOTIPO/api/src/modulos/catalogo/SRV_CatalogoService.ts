@@ -273,11 +273,11 @@ export class CatalogoService {
 
     const filas = (await this.dataSource.query(
       `SELECT DISTINCT p.id_producto, p.codigo, p.nombre,
-              ROUND(p.precio_base * (1 + p.porcentaje_iva / 100.0), 2) AS precio_con_iva,
-              p.precio_base, p.porcentaje_iva, c.nombre AS categoria,
-              p.destacado, p.descuento,
+              ROUND(p.precio_base * (1 + COALESCE(p.porcentaje_iva, 0) / 100.0), 2) AS precio_con_iva,
+              p.precio_base, COALESCE(p.porcentaje_iva, 0) AS porcentaje_iva, c.nombre AS categoria,
+              COALESCE(p.destacado, true) AS destacado, COALESCE(p.descuento, 0) AS descuento,
               ROUND(
-                p.precio_base * (1 + p.porcentaje_iva / 100.0) * (1 - p.descuento / 100.0),
+                p.precio_base * (1 + COALESCE(p.porcentaje_iva, 0) / 100.0) * (1 - COALESCE(p.descuento, 0) / 100.0),
               2) AS precio_final,
               (SELECT pi.url FROM producto_imagenes pi
                 WHERE pi.id_producto = p.id_producto AND pi.es_principal = true
